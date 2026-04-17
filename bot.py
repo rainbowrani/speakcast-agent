@@ -72,8 +72,8 @@ def get_history(chat_id):
 def add_to_history(chat_id, role, content):
     history = get_history(chat_id)
     history.append({"role": role, "content": content})
-    if len(history) > 40:
-        conversation_history[chat_id] = history[-40:]
+    if len(history) > 20:
+        conversation_history[chat_id] = history[-20:]
 
 # ── Claude API call with web search ──────────────────────────────────────────
 async def ask_claude(chat_id: int, user_message: str) -> str:
@@ -83,19 +83,24 @@ async def ask_claude(chat_id: int, user_message: str) -> str:
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1000,
+            max_tokens=800,
             system=SYSTEM_PROMPT,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=history
         )
 
-        reply = ""
+        # Safely extract only text blocks
+        reply_parts = []
         for block in response.content:
-            if hasattr(block, "text"):
-                reply += block.text
+            if block.type == "text" and block.text:
+                reply_parts.append(block.text)
 
-        add_to_history(chat_id, "assistant", [{"type": "text", "text": reply}])
-        return reply.strip() or "I couldn't generate a response — try again!"
+        reply = "\n".join(reply_parts).strip()
+
+        # Save simplified version to history
+        add_to_history(chat_id, "assistant", [{"type": "text", "text": reply or "Done."}])
+
+        return reply or "I searched but couldn't find a good result — try rephrasing!"
 
     except Exception as e:
         return f"Something went wrong: {str(e)}"
@@ -109,33 +114,26 @@ async def send_daily_briefing(context: ContextTypes.DEFAULT_TYPE):
     briefing_prompt = f"""It's {today}. Give Ranika her morning briefing. Search the web and include:
 
 1. One TEDx event currently open for speaker applications
-2. One specific podcast she should pitch herself to right now and why
-3. One trending wellness or burnout topic with a real stat or hook she can use in outreach
-4. One creative opportunity or idea she probably hasn't thought of
+2. One specific podcast she should pitch this week and why
+3. One trending wellness or burnout stat she can use in outreach
+4. One creative opportunity she probably hasn't thought of
 
-Be specific, warm, and actionable. She should be able to act on at least one of these today."""
+Be specific and actionable."""
 
     reply = await ask_claude(chat_id, briefing_prompt)
-    try:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"Your Morning Briefing\n\n{reply}"
-        )
-    except Exception as e:
-        print(f"Briefing error: {e}")
+    await context.bot.send_message(chat_id=chat_id, text=f"Your Morning Briefing\n\n{reply}")
 
 # ── Commands ──────────────────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Hey Ranika! I'm your SpeakCast research agent.\n\n"
-        "I'm here to help you land that TEDx stage, find podcasts, draft pitches, and stay on top of wellness trends.\n\n"
         "Commands:\n"
         "/tedx - Find TEDx opportunities\n"
         "/podcasts - Find podcasts to pitch\n"
         "/pitch - Draft an outreach pitch\n"
-        "/trends - What's trending in wellness\n"
-        "/duo - Joint opportunities for you and Dr. Claud\n"
-        "/briefing - Your daily briefing on demand\n"
+        "/trends - Trending wellness topics\n"
+        "/duo - Opportunities for you and Dr. Claud\n"
+        "/briefing - Daily briefing on demand\n"
         "/clear - Fresh start\n\n"
         "Or just talk to me naturally!"
     )
@@ -144,7 +142,7 @@ async def cmd_tedx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Searching for TEDx opportunities...")
     reply = await ask_claude(
         update.effective_chat.id,
-        "Search the web and find 3 TEDx events that are currently open for speaker applications or opening soon. For each: event name, location, application deadline, their theme, and why my story about burnout/wellness systems/belonging would be a strong fit. Also give me one tip to make my TEDx application stand out."
+        "Search the web and find 3 TEDx events currently open for speaker applications. For each: name, location, deadline, theme, and why my burnout and wellness systems story fits. Plus one tip to make my application stand out."
     )
     await update.message.reply_text(reply)
 
@@ -152,7 +150,7 @@ async def cmd_podcasts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Finding podcasts for you...")
     reply = await ask_claude(
         update.effective_chat.id,
-        "Search the web and find 3 real podcasts I should pitch this week. One in corporate wellness/HR, one for female founders/entrepreneurs, one in longevity/health. For each: show name, host, why I'm a great fit, and the specific angle I should pitch."
+        "Search the web and find 3 real podcasts I should pitch this week. One corporate wellness or HR show, one female founders show, one longevity or health show. For each: name, host, why I fit, and the angle to pitch."
     )
     await update.message.reply_text(reply)
 
@@ -160,25 +158,22 @@ async def cmd_trends(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Researching trends...")
     reply = await ask_claude(
         update.effective_chat.id,
-        "Search the web for the top 3 trending topics right now in corporate wellness, burnout, or longevity that I should reference in my pitches and talks. Give me a real current stat or hook for each one and tell me how to weave it into my outreach."
+        "Search the web for the top 3 trending topics in corporate wellness, burnout, or longevity right now. Give me a real stat or hook for each and how to use it in my outreach."
     )
     await update.message.reply_text(reply)
 
 async def cmd_pitch(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Who do you want to pitch?\n\n"
-        "Tell me:\n"
-        "- The podcast or event name\n"
-        "- Any details you know about them\n"
-        "- Solo or with Dr. Claud?\n\n"
-        "I'll write a personalized pitch in your voice."
+        "Tell me the podcast or event name, any details you know, and whether it is solo or with Dr. Claud.\n\n"
+        "I will write a personalized pitch in your voice."
     )
 
 async def cmd_duo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Finding duo opportunities...")
     reply = await ask_claude(
         update.effective_chat.id,
-        "Search the web and find 3 opportunities where Ranika and Dr. Claud van Oijen could appear TOGETHER as a duo — operator plus doctor building real longevity clinics. Think medical conferences, longevity summits, corporate health panels, podcast interviews. For each: opportunity name, why the duo angle is powerful, and a one-line pitch."
+        "Search the web and find 3 opportunities where Ranika and Dr. Claud van Oijen could appear together as a duo — operator plus doctor. Think medical conferences, longevity summits, corporate health panels, podcast interviews. For each: name, why the duo works, and a one-line pitch."
     )
     await update.message.reply_text(reply)
 
