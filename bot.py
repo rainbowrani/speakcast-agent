@@ -9,8 +9,6 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 ALLOWED_CHAT_ID = os.environ.get("ALLOWED_CHAT_ID")
 
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
 # ── Ranika & Dr. Claud's full profile ────────────────────────────────────────
 SYSTEM_PROMPT = """You are the personal research and outreach AI agent for Ranika Koneru and Dr. Claud van Oijen.
 
@@ -81,6 +79,7 @@ async def ask_claude(chat_id: int, user_message: str) -> str:
     history = get_history(chat_id)
 
     try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=800,
@@ -89,18 +88,14 @@ async def ask_claude(chat_id: int, user_message: str) -> str:
             messages=history
         )
 
-        # Safely extract only text blocks
         reply_parts = []
         for block in response.content:
             if block.type == "text" and block.text:
                 reply_parts.append(block.text)
 
         reply = "\n".join(reply_parts).strip()
-
-        # Save simplified version to history
         add_to_history(chat_id, "assistant", [{"type": "text", "text": reply or "Done."}])
-
-        return reply or "I searched but couldn't find a good result — try rephrasing!"
+        return reply or "I searched but could not find a good result — try rephrasing!"
 
     except Exception as e:
         return f"Something went wrong: {str(e)}"
@@ -112,12 +107,10 @@ async def send_daily_briefing(context: ContextTypes.DEFAULT_TYPE):
     chat_id = int(ALLOWED_CHAT_ID)
     today = datetime.now().strftime("%A, %B %d")
     briefing_prompt = f"""It's {today}. Give Ranika her morning briefing. Search the web and include:
-
 1. One TEDx event currently open for speaker applications
 2. One specific podcast she should pitch this week and why
 3. One trending wellness or burnout stat she can use in outreach
-4. One creative opportunity she probably hasn't thought of
-
+4. One creative opportunity she probably has not thought of
 Be specific and actionable."""
 
     reply = await ask_claude(chat_id, briefing_prompt)
@@ -196,6 +189,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    print("Starting SpeakCast bot...")
+    print(f"TELEGRAM_TOKEN set: {bool(TELEGRAM_TOKEN)}")
+    print(f"ANTHROPIC_API_KEY set: {bool(ANTHROPIC_API_KEY)}")
+    print(f"ALLOWED_CHAT_ID set: {bool(ALLOWED_CHAT_ID)}")
+
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -214,7 +212,7 @@ def main():
         days=(0, 1, 2, 3, 4, 5, 6)
     )
 
-    print("SpeakCast bot is running...")
+    print("SpeakCast bot is running!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
