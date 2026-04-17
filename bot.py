@@ -8,6 +8,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 ALLOWED_CHAT_ID = os.environ.get("ALLOWED_CHAT_ID")
+WEBHOOK_URL = "https://speakcast-agent-production.up.railway.app"
+PORT = 8443
 
 # ── Ranika & Dr. Claud's full profile ────────────────────────────────────────
 SYSTEM_PROMPT = """You are the personal research and outreach AI agent for Ranika Koneru and Dr. Claud van Oijen.
@@ -189,7 +191,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    print("Starting SpeakCast bot...")
+    print("Starting SpeakCast bot with webhooks...")
     print(f"TELEGRAM_TOKEN set: {bool(TELEGRAM_TOKEN)}")
     print(f"ANTHROPIC_API_KEY set: {bool(ANTHROPIC_API_KEY)}")
     print(f"ALLOWED_CHAT_ID set: {bool(ALLOWED_CHAT_ID)}")
@@ -212,8 +214,13 @@ def main():
         days=(0, 1, 2, 3, 4, 5, 6)
     )
 
-    print("SpeakCast bot is running!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    print(f"Running webhook on port {PORT}")
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}",
+        url_path=TELEGRAM_TOKEN
+    )
 
 if __name__ == "__main__":
     main()
